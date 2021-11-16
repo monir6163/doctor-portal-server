@@ -14,7 +14,8 @@ app.use(express.json());
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.r1nyd.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
-
+// stripe secret key 
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 // firebase user authorization 
 
 const serviceAccount = require('./doctor-portals-firebase-adminsdk.json');
@@ -70,6 +71,13 @@ async function run() {
             const result = await cursor.toArray();
             res.json(result)
         });
+        //appoinment person api
+        app.get('/appoinments/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const appoinment = await appoinmentCollection.findOne(query);
+            res.json(appoinment);
+        });
         //make admin role api
         app.put('/users/admin', verifyToken, async (req, res) => {
             const user = req.body;
@@ -96,7 +104,31 @@ async function run() {
                 isAdmin = true;
             };
             res.json({ admin: isAdmin })
-        })
+        });
+        // payment stripe api
+        app.post('/create-payment-intent', async (req, res) => {
+            const paymentInfo = req.body;
+            const amount = paymentInfo.price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                currency: 'usd',
+                amount: amount,
+                payment_method_types: ['card']
+            });
+            res.json({ clientSecret: paymentIntent.client_secret })
+        });
+        // update appoinment 
+        app.put('/appointments/:id', async (req, res) => {
+            const id = req.params.id;
+            const payment = req.body;
+            const filter = { _id: ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    payment: payment
+                }
+            };
+            const result = await appoinmentCollection.updateOne(filter, updateDoc);
+            res.json(result);
+        });
 
     }
     finally {
